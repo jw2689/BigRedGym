@@ -11,6 +11,7 @@ Supports MuJoCo CPU/Warp and optional VSim checkpoints.
 
 import argparse
 import random
+import time
 
 import torch
 
@@ -143,12 +144,13 @@ def setup(args):
     return env, runner
 
 
-def play(env, runner, duration=None, log_height=None):
+def play(env, runner, duration=None, log_height=None, realtime=True):
     if duration is None:
         n_steps = 10 * int(env.max_episode_length)
     else:
         n_steps = int(duration / env.dt)
     log = []
+    start = time.perf_counter()
     try:
         for step in range(n_steps):
             runner.set_actions(
@@ -166,6 +168,12 @@ def play(env, runner, duration=None, log_height=None):
                     )
                 )
             env.check_exit()
+            if realtime:
+                # Small envs simulate far faster than real time; pace the
+                # viewer so teleop and screen recordings run at true speed.
+                lag = start + (step + 1) * env.dt - time.perf_counter()
+                if lag > 0:
+                    time.sleep(lag)
     finally:
         if log_height is not None and log:
             save_height_log(log, log_height)
@@ -249,4 +257,10 @@ if __name__ == "__main__":
                 from gym.utils.interfaces.CommandVisualizer import CommandVisualizer
 
                 CommandVisualizer(env)
-        play(env, runner, args.duration, args.log_height)
+        play(
+            env,
+            runner,
+            args.duration,
+            args.log_height,
+            realtime=not args.headless,
+        )
