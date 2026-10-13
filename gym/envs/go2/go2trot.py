@@ -26,6 +26,14 @@ class Go2Trot(LeggedRobot):
             self.num_envs, 1, dtype=torch.float, device=self.device
         )
         self.gait_reference = torch.zeros_like(self.dof_pos_target)
+        # Commanded base height [m]; kept apart from the velocity `commands`
+        # so their resampling, drop-out, and visualizer stay 3-dimensional.
+        self.base_height_target = torch.full(
+            (self.num_envs, 1),
+            sum(self.command_ranges["base_height"]) / 2,
+            dtype=torch.float,
+            device=self.device,
+        )
         foot_names = self.robot_layout.body_groups["feet"]
         phase_offsets = self.cfg.control.gait_phase_offsets
         self._gait_phase_offsets = (
@@ -145,6 +153,14 @@ class Go2Trot(LeggedRobot):
             )
             self.commands.masked_fill_(drop, 0.0)
 
+        height = torch_rand_float(
+            self.command_ranges["base_height"][0],
+            self.command_ranges["base_height"][1],
+            shape=self.base_height_target.shape,
+            device=self.device,
+        )
+        masked_update(self.base_height_target, height, command_mask)
+
     def _reset_idx(self, reset_mask):
         super()._reset_idx(reset_mask)
         self.dof_pos_target.masked_fill_(reset_mask.unsqueeze(1), 0.0)
@@ -224,6 +240,12 @@ class Go2Trot(LeggedRobot):
         error /= self.scales["base_height"]
         error = torch.clamp(error, max=0, min=None).flatten()
         return self._sqrdexp(error)
+
+    def _reward_tracking_base_height(self):
+        """Tracking of the commanded base height"""
+        error = self.base_height - self.base_height_target
+        error /= self.scales["base_height"]
+        return self._sqrdexp(error).flatten()
 
     def _reward_tracking_lin_vel(self):
         """Tracking of linear velocity commands (xy axes)"""

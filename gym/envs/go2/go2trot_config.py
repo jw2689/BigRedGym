@@ -63,6 +63,9 @@ class Go2TrotCfg(Go2Cfg):
 
         class ranges(Go2Cfg.commands.ranges):
             lin_vel_x = [-1.0, 0.0, 1.0, 3.0]
+            # Max knee extension (-0.84 rad) puts the base ~0.41 m high with
+            # feet under the hips; the base body touches ground near 0.06 m.
+            base_height = [0.18, 0.36]  # min max [m]
 
     class push_robots(Go2Cfg.push_robots):
         toggle = True
@@ -97,6 +100,7 @@ class Go2TrotCfg(Go2Cfg):
         # Canonical RobotLayout order is FL, FR, RL, RR, with
         # hip, thigh, calf inside each leg. Backends map native order to it.
         base_height = 0.3
+        base_height_target = base_height
         dof_pos = 4 * [1.0472, 2.53075, 0.94247]
         dof_pos_obs = dof_pos
         dof_pos_target = [0.5 * x for x in dof_pos]
@@ -117,6 +121,7 @@ class Go2TrotRunnerCfg(Go2RunnerCfg):
             "dof_pos_target",
             "phase_obs",
             "phase_frequency",
+            "base_height_target",
         ]
         normalize_obs = False
         smooth_exploration = False
@@ -149,6 +154,7 @@ class Go2TrotRunnerCfg(Go2RunnerCfg):
             "dof_pos_target",
             "phase_obs",
             "phase_frequency",
+            "base_height_target",
         ]
         normalize_obs = False
 
@@ -165,7 +171,8 @@ class Go2TrotRunnerCfg(Go2RunnerCfg):
                 dof_pos_limits = 0.0
                 feet_contact_forces = 0.0
                 dof_near_home = 0.0
-                min_base_height = 0.5
+                min_base_height = 0.0
+                tracking_base_height = 2.0
                 action_rate = 0.25
                 action_rate2 = 0.025
                 trot_support = 0.625

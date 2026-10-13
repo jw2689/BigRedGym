@@ -24,7 +24,7 @@ natural U/O pair collides with vsim's step toggle:
      N M             N / M   yaw left / right
                      R       reset envs
                      Esc     quit (or close the window)
-                     Up/Down up / down (command effects: student TODO)
+                     Up/Down raise / lower base-height command
 
 GLFW (MuJoCo) uses ASCII codes for letter keys, so `ord(letter)` is the
 keycode. Each viewer adapter translates named special keys such as UP/DOWN
@@ -53,7 +53,7 @@ HELP_LINES = (
     "  I/K           forward / back",
     "  J/L           strafe left / strafe right",
     "  N/M           yaw left / yaw right",
-    "  Up/Down       up / down (command effects: student TODO)",
+    "  Up/Down       raise / lower base height",
     "  R             reset envs",
     "  Esc / window  quit",
     "  commands step in 1/5 increments of max",
@@ -79,6 +79,13 @@ class TeleopCommands:
         self.max_vel_yaw = 2.0
         self.increment_yaw = self.max_vel_yaw * 0.2
 
+        # Base-height command, only on envs that define one (e.g. Go2Trot).
+        self.has_height = hasattr(env, "base_height_target")
+        if self.has_height:
+            self.min_height, self.max_height = env.command_ranges["base_height"]
+            self.increment_z = (self.max_height - self.min_height) * 0.2
+            env.base_height_target[:] = 0.5 * (self.min_height + self.max_height)
+
         env.commands[:] = 0.0
         env.commands[:, 0] = 1.0  # seed forward velocity so motion is visible
         if hasattr(env.cfg, "commands"):
@@ -101,6 +108,12 @@ class TeleopCommands:
             c[:, 2] = torch.clamp(c[:, 2] + self.increment_yaw, max=self.max_vel_yaw)
         elif action == "yaw_right":
             c[:, 2] = torch.clamp(c[:, 2] - self.increment_yaw, min=-self.max_vel_yaw)
+        elif action in ("up", "down"):
+            if not self.has_height:
+                return
+            h = self.env.base_height_target
+            step = self.increment_z if action == "up" else -self.increment_z
+            h[:] = torch.clamp(h + step, min=self.min_height, max=self.max_height)
         elif action == "reset":
             self.env.timed_out[:] = True
             self.env.reset()
