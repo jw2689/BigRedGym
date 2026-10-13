@@ -244,7 +244,9 @@ class Go2Trot(LeggedRobot):
     def _reward_tracking_base_height(self):
         """Tracking of the commanded base height"""
         error = self.base_height - self.base_height_target
-        error /= self.scales["base_height"]
+        # Much tighter than scales["base_height"]: with the loose 0.3 m scale,
+        # hovering mid-range still earned ~70% at the extremes.
+        error /= self.cfg.reward_settings.base_height_tracking_scale
         return self._sqrdexp(error).flatten()
 
     def _reward_tracking_lin_vel(self):

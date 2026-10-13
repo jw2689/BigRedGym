@@ -95,6 +95,7 @@ class Go2TrotCfg(Go2Cfg):
 
     class reward_settings(Go2Cfg.reward_settings):
         base_height_target = Go2Cfg.reward_settings.base_height_target
+        base_height_tracking_scale = 0.1  # [m] error normalizer for tracking
 
     class scaling(Go2Cfg.scaling):
         # Canonical RobotLayout order is FL, FR, RL, RR, with
@@ -172,7 +173,7 @@ class Go2TrotRunnerCfg(Go2RunnerCfg):
                 feet_contact_forces = 0.0
                 dof_near_home = 0.0
                 min_base_height = 0.0
-                tracking_base_height = 2.0
+                tracking_base_height = 3.0
                 action_rate = 0.25
                 action_rate2 = 0.025
                 trot_support = 0.625
