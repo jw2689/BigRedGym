@@ -72,6 +72,19 @@ def get_play_args(argv=None):
         "gym/utils/interfaces/MujocoKeyboardInterface.py for key bindings). "
         "Use --no-keyboard to disable.",
     )
+    parser.add_argument(
+        "--duration",
+        type=float,
+        default=None,
+        help="Playback length in seconds (default: 10 episodes)",
+    )
+    parser.add_argument(
+        "--log_height",
+        type=str,
+        default=None,
+        help="Record env 0's commanded and actual base height; writes "
+        "<path>.csv and <path>.png when playback ends or the viewer closes.",
+    )
     return parser.parse_args(argv)
 
 
@@ -130,16 +143,68 @@ def setup(args):
     return env, runner
 
 
-def play(env, runner):
-    n_steps = 10 * int(env.max_episode_length)
-    for _ in range(n_steps):
-        runner.set_actions(
-            runner.actor_cfg["actions"],
-            runner.get_inference_actions(),
-            runner.actor_cfg["disable_actions"],
-        )
-        env.step()
-        env.check_exit()
+def play(env, runner, duration=None, log_height=None):
+    if duration is None:
+        n_steps = 10 * int(env.max_episode_length)
+    else:
+        n_steps = int(duration / env.dt)
+    log = []
+    try:
+        for step in range(n_steps):
+            runner.set_actions(
+                runner.actor_cfg["actions"],
+                runner.get_inference_actions(),
+                runner.actor_cfg["disable_actions"],
+            )
+            env.step()
+            if log_height is not None:
+                log.append(
+                    (
+                        (step + 1) * env.dt,
+                        env.base_height_target[0, 0].item(),
+                        env.base_height[0, 0].item(),
+                    )
+                )
+            env.check_exit()
+    finally:
+        if log_height is not None and log:
+            save_height_log(log, log_height)
+
+
+def save_height_log(log, path):
+    """Write the height log as CSV and a commanded-vs-actual time-series plot."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    data = np.array(log)
+    np.savetxt(
+        f"{path}.csv",
+        data,
+        delimiter=",",
+        header="time_s,commanded_height_m,actual_height_m",
+        comments="",
+    )
+    error = data[:, 2] - data[:, 1]
+    fig, (ax, ax_err) = plt.subplots(
+        2, 1, sharex=True, figsize=(9, 5), height_ratios=[3, 1]
+    )
+    ax.plot(data[:, 0], data[:, 1], "--", label="commanded")
+    ax.plot(data[:, 0], data[:, 2], label="actual")
+    ax.set_ylabel("base height [m]")
+    ax.legend()
+    ax.set_title(
+        f"Base-height tracking (RMS error {np.sqrt(np.mean(error**2)) * 100:.1f} cm)"
+    )
+    ax_err.plot(data[:, 0], error * 100)
+    ax_err.axhline(0, color="gray", linewidth=0.5)
+    ax_err.set_ylabel("error [cm]")
+    ax_err.set_xlabel("time [s]")
+    fig.tight_layout()
+    fig.savefig(f"{path}.png", dpi=150)
+    print(f"Saved height log to {path}.csv and {path}.png")
 
 
 if __name__ == "__main__":
@@ -184,4 +249,4 @@ if __name__ == "__main__":
                 from gym.utils.interfaces.CommandVisualizer import CommandVisualizer
 
                 CommandVisualizer(env)
-        play(env, runner)
+        play(env, runner, args.duration, args.log_height)
