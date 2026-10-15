@@ -69,6 +69,29 @@ class Go2Trot(LeggedRobot):
             self._gait_joint_offsets
             + self._gait_joint_amplitudes * torch.sin(joint_phase)
         )
+        if self.cfg.control.height_reference:
+            self.gait_reference += self._height_reference_offsets()
+
+    def _height_reference_offsets(self):
+        """Thigh/calf shifts that crouch or extend the legs toward the commanded
+        base height, so the policy only has to stabilise the posture.
+
+        Two-link leg with the foot under the hip: hip-foot distance
+        d = 2 l cos(knee / 2). The nominal gait offsets are taken to produce
+        `height_reference_nominal`; a commanded change in base height is
+        applied as the same change in d.
+        """
+        l = self.cfg.control.leg_link_length
+        thigh0, calf0 = self.cfg.control.gait_joint_offsets[1:3]
+        d0 = 2 * l * torch.cos(torch.tensor(calf0 / 2))
+        d = d0 + self.base_height_target - self.cfg.control.height_reference_nominal
+        knee = -2 * torch.acos(torch.clamp(d / (2 * l), max=1.0))
+        # stay just inside the calf joint's straight-leg limit
+        knee = torch.clamp(knee, max=self._actuated_dof_pos_limits[2, 1] - 0.05)
+        d_calf = knee - calf0
+        d_thigh = -0.5 * d_calf  # keeps the foot under the hip
+        leg = torch.cat([torch.zeros_like(d_calf), d_thigh, d_calf], dim=1)
+        return leg.repeat(1, 4)
 
     def _leg_phases(self):
         return torch.remainder(
@@ -149,7 +172,7 @@ class Go2Trot(LeggedRobot):
             )
             self.commands[:, :2].masked_fill_(drop, 0.0)
             drop = command_mask.unsqueeze(1) & (
-                torch.rand(self.num_envs, 1, device=self.device) >= 0.9
+                torch.rand(self.num_envs, 1, device=self.device) >= 0.7
             )
             self.commands.masked_fill_(drop, 0.0)
 
@@ -171,6 +194,8 @@ class Go2Trot(LeggedRobot):
             reset_mask,
         )
         self._update_phase_observation()
+        if self.cfg.control.height_reference:
+            masked_update(self.dof_pos_obs, self._height_relative_dof_pos(), reset_mask)
 
     def _post_physics_step(self):
         super()._post_physics_step()
@@ -186,6 +211,14 @@ class Go2Trot(LeggedRobot):
     def _post_decimation_step(self):
         super()._post_decimation_step()
         self._update_phase_observation()
+        if self.cfg.control.height_reference:
+            self.dof_pos_obs = self._height_relative_dof_pos()
+
+    def _height_relative_dof_pos(self):
+        """Joint positions relative to the height-shifted home posture, so a
+        commanded crouch looks 'nominal' to the policy instead of a
+        disturbance it pushes back against."""
+        return self.dof_pos - self.default_dof_pos - self._height_reference_offsets()
 
     def _foot_contact_strength(self):
         """Map upward foot load smoothly from zero to nominal body-weight."""
@@ -241,6 +274,17 @@ class Go2Trot(LeggedRobot):
         error = torch.clamp(error, max=0, min=None).flatten()
         return self._sqrdexp(error)
 
+    def _reward_tilt(self):
+        """Penalize roll/pitch (quadratic; the sqrdexp orientation term barely
+        cares past ~20 deg, so height was being 'tracked' by pitching nose-down)"""
+        return -torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1)
+
+    def _reward_base_motion(self):
+        """Penalize base bounce and roll/pitch rate (quadratic, never saturates)"""
+        bounce = torch.square(self.base_lin_vel[:, 2])
+        rock = torch.sum(torch.square(self.base_ang_vel[:, :2]), dim=1)
+        return -(bounce + 0.1 * rock)
+
     def _reward_tracking_base_height(self):
         """Tracking of the commanded base height"""
         error = self.base_height - self.base_height_target
@@ -260,9 +304,7 @@ class Go2Trot(LeggedRobot):
 
     def _reward_tracking_ang_vel(self):
         """Tracking of angular velocity commands (yaw)"""
-        ang_vel_error = torch.square(
-            (self.commands[:, 2] - self.base_ang_vel[:, 2]) / 2.5
-        )
+        ang_vel_error = self.commands[:, 2] - self.base_ang_vel[:, 2]
         return self._sqrdexp(ang_vel_error)
 
     def _reward_dof_vel(self):

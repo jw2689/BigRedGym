@@ -57,6 +57,11 @@ class Go2TrotCfg(Go2Cfg):
         # shortening the swing diagonal.
         gait_joint_offsets = 4 * [0.0, 0.96, -1.36]
         gait_joint_amplitudes = 4 * [0.0, -0.15, 0.30]
+        # Shift the gait reference with the commanded base height (see
+        # Go2Trot._height_reference_offsets).
+        height_reference = True
+        height_reference_nominal = 0.26  # [m] base height of the nominal gait
+        leg_link_length = 0.213  # [m] thigh and calf length
 
     class commands(Go2Cfg.commands):
         var = 1.0
@@ -65,7 +70,7 @@ class Go2TrotCfg(Go2Cfg):
             lin_vel_x = [-1.0, 0.0, 1.0, 3.0]
             # Max knee extension (-0.84 rad) puts the base ~0.41 m high with
             # feet under the hips; the base body touches ground near 0.06 m.
-            base_height = [0.18, 0.36]  # min max [m]
+            base_height = [0.11, 0.36]  # min max [m]
 
     class push_robots(Go2Cfg.push_robots):
         toggle = True
@@ -165,7 +170,7 @@ class Go2TrotRunnerCfg(Go2RunnerCfg):
                 tracking_ang_vel = 2.0
                 lin_vel_z = 0.0
                 ang_vel_xy = 0.01
-                orientation = 1.0
+                orientation = 5.0
                 torques = 5.0e-6
                 dof_vel = 0.0
                 stand_still = 0.0
@@ -173,14 +178,16 @@ class Go2TrotRunnerCfg(Go2RunnerCfg):
                 feet_contact_forces = 0.0
                 dof_near_home = 0.0
                 min_base_height = 0.0
-                tracking_base_height = 3.0
-                action_rate = 0.25
-                action_rate2 = 0.025
+                tracking_base_height = 5.0
+                action_rate = 2.0
+                base_motion = 1.0
+                tilt = 30.0
+                action_rate2 = 0.2
                 trot_support = 0.625
                 swing_contact = 1.25
 
             class termination_weight:
-                termination = 0.01
+                termination = 5.0
 
     class algorithm:
         # both
@@ -197,7 +204,7 @@ class Go2TrotRunnerCfg(Go2RunnerCfg):
         # Critic
         use_clipped_value_loss = True
         # Actor
-        entropy_coef = 0.01
+        entropy_coef = 0.005
         schedule = "adaptive"  # could be adaptive, fixed
         desired_kl = 0.01
         lr_range = [2e-5, 1e-2]
