@@ -69,8 +69,7 @@ class Go2Trot(LeggedRobot):
             self._gait_joint_offsets
             + self._gait_joint_amplitudes * torch.sin(joint_phase)
         )
-        if self.cfg.control.height_reference:
-            self.gait_reference += self._height_reference_offsets()
+        self.gait_reference += self._height_reference_offsets()
 
     def _height_reference_offsets(self):
         """Thigh/calf shifts that crouch or extend the legs toward the commanded
@@ -82,7 +81,7 @@ class Go2Trot(LeggedRobot):
         applied as the same change in d.
         """
         l = self.cfg.control.leg_link_length
-        thigh0, calf0 = self.cfg.control.gait_joint_offsets[1:3]
+        calf0 = self.cfg.control.gait_joint_offsets[2]
         d0 = 2 * l * torch.cos(torch.tensor(calf0 / 2))
         d = d0 + self.base_height_target - self.cfg.control.height_reference_nominal
         knee = -2 * torch.acos(torch.clamp(d / (2 * l), max=1.0))
@@ -194,8 +193,7 @@ class Go2Trot(LeggedRobot):
             reset_mask,
         )
         self._update_phase_observation()
-        if self.cfg.control.height_reference:
-            masked_update(self.dof_pos_obs, self._height_relative_dof_pos(), reset_mask)
+        masked_update(self.dof_pos_obs, self._height_relative_dof_pos(), reset_mask)
 
     def _post_physics_step(self):
         super()._post_physics_step()
@@ -211,8 +209,7 @@ class Go2Trot(LeggedRobot):
     def _post_decimation_step(self):
         super()._post_decimation_step()
         self._update_phase_observation()
-        if self.cfg.control.height_reference:
-            self.dof_pos_obs = self._height_relative_dof_pos()
+        self.dof_pos_obs = self._height_relative_dof_pos()
 
     def _height_relative_dof_pos(self):
         """Joint positions relative to the height-shifted home posture, so a
@@ -288,9 +285,7 @@ class Go2Trot(LeggedRobot):
     def _reward_tracking_base_height(self):
         """Tracking of the commanded base height"""
         error = self.base_height - self.base_height_target
-        # Much tighter than scales["base_height"]: with the loose 0.3 m scale,
-        # hovering mid-range still earned ~70% at the extremes.
-        error /= self.cfg.reward_settings.base_height_tracking_scale
+        error /= .1
         return self._sqrdexp(error).flatten()
 
     def _reward_tracking_lin_vel(self):

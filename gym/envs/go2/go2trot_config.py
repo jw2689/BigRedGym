@@ -57,9 +57,6 @@ class Go2TrotCfg(Go2Cfg):
         # shortening the swing diagonal.
         gait_joint_offsets = 4 * [0.0, 0.96, -1.36]
         gait_joint_amplitudes = 4 * [0.0, -0.15, 0.30]
-        # Shift the gait reference with the commanded base height (see
-        # Go2Trot._height_reference_offsets).
-        height_reference = True
         height_reference_nominal = 0.26  # [m] base height of the nominal gait
         leg_link_length = 0.213  # [m] thigh and calf length
 
@@ -100,7 +97,6 @@ class Go2TrotCfg(Go2Cfg):
 
     class reward_settings(Go2Cfg.reward_settings):
         base_height_target = Go2Cfg.reward_settings.base_height_target
-        base_height_tracking_scale = 0.1  # [m] error normalizer for tracking
 
     class scaling(Go2Cfg.scaling):
         # Canonical RobotLayout order is FL, FR, RL, RR, with
